@@ -9,7 +9,7 @@ $ ./gtfsman.py --help
 ## Examples
 ### Init
 ```
-$ ./gtfsman.py init switzerland http://gtfs.geops.de/dl/gtfs_complete.zip
+$ ./gtfsman.py init palermo http://www.comune.palermo.it/gtfs/amat_feed_gtfs.zip
 Downloading http://www.comune.palermo.it/gtfs/amat_feed_gtfs.zip to /var/lib/gtfs/palermo/gtfs.zip (10518 kB)
 Extracting zip file /var/lib/gtfs/palermo/gtfs.zip
 Setting feed url for /var/lib/gtfs/palermo/gtfs.zip to http://www.comune.palermo.it/gtfs/amat_feed_gtfs.zip
