@@ -6,8 +6,8 @@ GTFS manager - (C) 2015 by geOps
 A cache will be build in the GTFS directories, containing the valid period of GTFS feeds.
 
 Usage:
-  gtfsman.py [list | status | show] [--active | -a] [--notactive | -n] [--base-folder=<path>]
-  gtfsman.py show <feedname>
+  gtfsman.py [list | status | show] [--active | -a] [--notactive | -n] [--checkremotedate] [--base-folder=<path>]
+  gtfsman.py show <feedname> [--checkremotedate]
   gtfsman.py update <feedname> [--dontbug] [--base-folder=<path>]
   gtfsman.py update-all [--base-folder=<path>] [--active | -a] [--notactive | -n] [--dontbug]
   gtfsman.py update-All [--base-folder=<path>] [--active | -a] [--notactive | -n] [--dontbug]
@@ -23,6 +23,7 @@ Usage:
 Options:
   -h --help                     Show this screen.
   --version                     Show version.
+  --checkremotedate             Check if the modification date of the remote file is newer than local files
   -l --list                     List all feeds.
   -a --active                   Only show feeds that are active
   -n --notactive                Only show feeds that are inactive
@@ -33,6 +34,8 @@ Options:
 import csv, os, sys
 import zipfile
 import urllib2
+import httplib
+from dateutil import parser
 from datetime import datetime
 from urlparse import urlparse
 from os.path import relpath
@@ -64,16 +67,11 @@ class GTFSManager(object):
         elif self.options['set-pp']:
             self._store_postprocess_cmd(self.options['<feedname>'], self.options['<pp>'])
         elif self.options['show']:
-            if not self.options['<feedname>']:
-                self.list()  
-            else:
-                self._show_feed(self.options['<feedname>'])
+            self._show_feed(self.options['<feedname>'])
         elif self.options['clear-cache'] or self.options['cc']:
             self._clear_caches()
         elif self.options['generate-cache']:
-            self._clear_caches()
-            for f in self._loadfeeds():
-                print 'Generated cache for ' + f['name']
+            self._generate_caches()
         elif self.options['init']:
             initpath = os.path.join(self.options['--base-folder'], self.options['<feedname>'])
             self.init(initpath)
@@ -108,7 +106,7 @@ class GTFSManager(object):
     def update(self, feedname):
         feed = self._get_feed_by_name(feedname)
         if not feed:
-            sys.stderr.write('No feed named "' + feedname + '"" found...\n')
+            sys.stderr.write('No feed named "' + feedname + '" found...\n')
             return
         self.update_feed(feed)
 
@@ -120,7 +118,6 @@ class GTFSManager(object):
                 return
             feed['url'] = raw_input('Enter feed URL: ')
             self._store_feed_url(feed['url'], feed['fullpath'])
-
 
         if self._download_feed(feed['fullpath'], feed['url']):
             # rewrite cache by calling feed load
@@ -155,7 +152,7 @@ class GTFSManager(object):
         if not url:
             url = raw_input('Enter feed URL: ')
         if not feed:
-            sys.stderr.write('No feed named "' + str(feedname) + '"" found...\n')
+            sys.stderr.write('No feed named "' + str(feedname) + '" found...\n')
             return
         self._store_feed_url(url, feed['fullpath'])
 
@@ -211,9 +208,12 @@ class GTFSManager(object):
         return None
 
     def _show_feed(self, feedname):
+        if not feedname:
+            return self.list()
+
         f = self._loadfeed(feedname)
         if not f:
-            sys.stderr.write('No feed named "' + str(feedname) + '"" found...\n')
+            sys.stderr.write('No feed named "' + str(feedname) + '" found...\n')
             return
 
         colort = '\033[92m'
@@ -234,6 +234,8 @@ class GTFSManager(object):
         print 'data from: '.ljust(17) + colorf + datetime.strftime(f['data_from'], "%d/%m/%Y") + '\033[0m'
         print 'data until: '.ljust(17) + colort + datetime.strftime(f['data_to'], "%d/%m/%Y") + '\033[0m'
         print 'url: '.ljust(17) + str(f['url'])
+        if f['remote_date'] and f['local_date']:
+            print 'newer at url: '.ljust(17) + ('Yes' if f['has_newer_zip'] else 'No') + ' (remote: ' +  datetime.strftime(f['remote_date'], "%d/%m/%Y") + ', local: ' + datetime.strftime(f['local_date'], "%d/%m/%Y") + ')'
         print 'has shapes: '.ljust(17) + ('Yes' if f['has_shapes'] else 'No')
         if f['postprocess']:
             print 'Postprocess cmd: '.ljust(17) + f['postprocess']
@@ -255,7 +257,7 @@ class GTFSManager(object):
             # feed only starts in the future...
             color = '\033[94m'
 
-        print color + f['name'].ljust(30) + '\t' + datetime.strftime(f['data_from'], "%d/%m/%Y").ljust(10) + '\t' + datetime.strftime(f['data_to'], "%d/%m/%Y").ljust(15) + '\t' + ('s' if f['has_shapes'] else ' ') + '\t' + ('u' if f['url'] else ' ') + '\033[0m'
+        print color + f['name'].ljust(30) + '\t' + datetime.strftime(f['data_from'], "%d/%m/%Y").ljust(10) + '\t' + datetime.strftime(f['data_to'], "%d/%m/%Y").ljust(15) + '\t' + ('s' if f['has_shapes'] else ' ') + '\t' + ('u' if f['url'] else ' ') + '\t' + ('r' if f['has_newer_zip'] else ' ') + '\033[0m'
 
     def _loadfeeds(self, name = None):
         ret = []
@@ -265,6 +267,9 @@ class GTFSManager(object):
 
     def _loadfeed(self, path):
         try:
+            if not self._is_gtfs(path):
+                raise Exception('Feed not found.')
+
             # read date validity
             feed = {}
             feed['name'] = relpath(os.path.abspath(path), self.options['--base-folder'])
@@ -274,11 +279,29 @@ class GTFSManager(object):
             feed['fullpath'] = path
             feed['has_shapes'] = os.path.isfile(os.path.join(path, 'shapes.txt'))
             feed['postprocess'] = self._parse_postprocess_cmd(path)
+
+            if self.options['--checkremotedate']:
+                feed['has_newer_zip'], feed['remote_date'], feed['local_date'] = self._check_for_newer_zip(path, feed['url'])
+
             self._write_span_cache(feed)
             return feed
         except Exception, err:
             print 'Error while parsing ' + str(path)
             print err
+
+    def _check_for_newer_zip(self, path, url):
+        if not url: return None, None, None
+        u = urlparse(url)
+        conn = httplib.HTTPConnection(u.netloc)
+        conn.request("HEAD", u.path)
+        res = conn.getresponse()
+        if res.status == 200:
+            mod = dict(res.getheaders()).get('last-modified', None)
+            if not mod: return None, None, None
+            servertime = parser.parse(mod, ignoretz=True) # ignoretz to get non-offsetted timestamp
+            # use age of trips.txt as indicator for global feed age
+            localtime = datetime.fromtimestamp(os.path.getmtime(os.path.join(path, 'trips.txt')))
+            return localtime < servertime, servertime, localtime
 
     def _parse_feed_url(self, path):
         if os.path.isfile(os.path.join(path, 'feed_url.txt')):
@@ -402,6 +425,18 @@ class GTFSManager(object):
 
         return ret
 
+    def _is_gtfs(self, path):
+        path = os.path.abspath(path)
+        isgtfs = 0
+        if not os.path.exists(path): return False
+        for item in os.listdir(path):
+                if item in GTFS_REQ_FILES:
+                    isgtfs += 1
+                if isgtfs == len(GTFS_REQ_FILES):
+                    return True
+
+        return False
+
     def _write_span_cache(self, feed):
         path = feed['fullpath']
         from_d = datetime.strftime(feed['data_from'], "%Y%m%d")
@@ -418,6 +453,11 @@ class GTFSManager(object):
                     return {'from_date' : str(parts[0]), 'to_date' : str(parts[1])}
         return None
 
+    def _generate_caches(self):
+        self._clear_caches()
+        for f in self._loadfeeds():
+            print 'Generated cache for ' + f['name']
+
     def _clear_caches(self):
         print 'Clearing caches...'
         for path in self._getfeeds(self.options['--base-folder'], 2):
@@ -429,11 +469,11 @@ class GTFSManager(object):
             os.remove(cachepath)
 
 def main(options=None):
-    h2g = GTFSManager(options)
+    theman = GTFSManager(options)
 
 if __name__ == '__main__':
     from docopt import docopt
 
-    arguments = docopt(__doc__, version='geOps GTFS Manager 0.1')
+    arguments = docopt(__doc__, version='geOps GTFS Manager 0.2')
     main(options=arguments)
     exit(0)
