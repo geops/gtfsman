@@ -90,14 +90,14 @@ class GTFSManager(object):
 
         if not url:
             # ask for zip URL
-            url = raw_input('Enter feed URL for new feed "' + will_be_name + '": ')
+            url = raw_input('Enter feed URL for new feed "%s": ' % will_be_name)
         if self._download_feed(path, url):
             self._store_feed_url(url, path)
             self._clear_cache(path)
             self._get_feed_by_name(will_be_name)
-            print "\033[92mInitialized new feed in " + path + '\033[0m'
+            print '\033[92mInitialized new feed in %s \033[0m' % path
         else:
-            print "\033[91mInitialization of " + path + 'failed.\033[0m'
+            print '\033[91mInitialization of %s failed.\033[0m' % path
 
     def list(self):
         for f in self._loadfeeds():
@@ -106,14 +106,14 @@ class GTFSManager(object):
     def update(self, feedname):
         feed = self._get_feed_by_name(feedname)
         if not feed:
-            sys.stderr.write('No feed named "' + feedname + '" found...\n')
+            sys.stderr.write('No feed named "%s" found...\n' % feedname)
             return
         self.update_feed(feed)
 
     def update_feed(self, feed):
-        print 'Trying to update "' + feed['name'] + '"...'
+        print 'Trying to update "%s"...' % feed['name']
         if not feed['url']:
-            print 'No feed URL stored for "' + feed['name'] + '" in feed_url.txt'
+            print 'No feed URL stored for "%s" in feed_url.txt' % feed['name']
             if self.options['--dontbug']:
                 return
             feed['url'] = raw_input('Enter feed URL: ')
@@ -123,7 +123,7 @@ class GTFSManager(object):
             # rewrite cache by calling feed load
             self._clear_cache(feed['fullpath'])
             self._get_feed_by_name(feed['name'])
-            print "\033[92mUpdated " + feed['name'] + '\033[0m'
+            print '\033[92mUpdated %s\033[0m' % feed['name']
 
     def _download_feed(self, path, url):
         url = urlparse(url)
@@ -131,13 +131,13 @@ class GTFSManager(object):
             self._get_zip(url, path)
             self._extract_zip(path)
         except Exception as e:
-            sys.stderr.write('\033[91mCould not fetch ' + url.geturl().strip() + ', skipping.\n')
-            sys.stderr.write('\033[91mProblem: ' + str(e) + '\033[0m\n')
+            sys.stderr.write('\033[91mCould not fetch %s, skipping.\n' % url.geturl().strip())
+            sys.stderr.write('\033[91mProblem: %s\033[0m\n' % str(e))
             return False
 
          # call postprocess
         if not self._postprocess(path):
-            sys.stderr.write('\033[91mError while executing postprocess cmd for ' + url.geturl().strip() + '\033[0m\n')
+            sys.stderr.write('\033[91mError while executing postprocess cmd for %s\033[0m\n' % url.geturl().strip())
             exit(1)
         return True
 
@@ -152,7 +152,7 @@ class GTFSManager(object):
         if not url:
             url = raw_input('Enter feed URL: ')
         if not feed:
-            sys.stderr.write('No feed named "' + str(feedname) + '" found...\n')
+            sys.stderr.write('No feed named "%s" found...\n' % str(feedname))
             return
         self._store_feed_url(url, feed['fullpath'])
 
@@ -181,7 +181,7 @@ class GTFSManager(object):
                 status = r"%8d kB  [%3.2f%%]" % (file_size_dl / 1024, file_size_dl * 100. / file_size)
             else:
                 status = r"%8d kB" % (file_size_dl / 1024)
-            status = status + chr(8)*(len(status)+1)
+            status = status + chr(8) * (len(status)+1)
             print status,
 
         f.close()
@@ -213,7 +213,7 @@ class GTFSManager(object):
 
         f = self._loadfeed(feedname)
         if not f:
-            sys.stderr.write('No feed named "' + str(feedname) + '" found...\n')
+            sys.stderr.write('No feed named "%s" found...\n' % str(feedname))
             return
 
         colort = '\033[92m'
@@ -231,11 +231,11 @@ class GTFSManager(object):
             colorf = '\033[94m'
 
         print feedname
-        print 'data from: '.ljust(17) + colorf + datetime.strftime(f['data_from'], "%d/%m/%Y") + '\033[0m'
-        print 'data until: '.ljust(17) + colort + datetime.strftime(f['data_to'], "%d/%m/%Y") + '\033[0m'
+        print ('data from: '.ljust(17) + '%s%s' + '\033[0m') % (colorf, datetime.strftime(f['data_from'], "%d/%m/%Y"))
+        print ('data until: '.ljust(17) + '%s%s' + '\033[0m') % (colort, datetime.strftime(f['data_to'], "%d/%m/%Y"))
         print 'url: '.ljust(17) + str(f['url'])
-        if f['remote_date'] and f['local_date']:
-            print 'newer at url: '.ljust(17) + ('Yes' if f['has_newer_zip'] else 'No') + ' (remote: ' +  datetime.strftime(f['remote_date'], "%d/%m/%Y") + ', local: ' + datetime.strftime(f['local_date'], "%d/%m/%Y") + ')'
+        if 'remote_date' in f and 'local_date' in f:
+            print 'newer at url: '.ljust(17) + ('Yes' if f.get('has_newer_zip', False) else 'No') + ' (remote: ' +  datetime.strftime(f['remote_date'], "%d/%m/%Y") + ', local: ' + datetime.strftime(f['local_date'], "%d/%m/%Y") + ')'
         print 'has shapes: '.ljust(17) + ('Yes' if f['has_shapes'] else 'No')
         if f['postprocess']:
             print 'Postprocess cmd: '.ljust(17) + f['postprocess']
@@ -257,7 +257,7 @@ class GTFSManager(object):
             # feed only starts in the future...
             color = '\033[94m'
 
-        print color + f['name'].ljust(30) + '\t' + datetime.strftime(f['data_from'], "%d/%m/%Y").ljust(10) + '\t' + datetime.strftime(f['data_to'], "%d/%m/%Y").ljust(15) + '\t' + ('s' if f['has_shapes'] else ' ') + '\t' + ('u' if f['url'] else ' ') + '\t' + ('r' if f['has_newer_zip'] else ' ') + '\033[0m'
+        print color + f['name'].ljust(30) + '\t' + datetime.strftime(f['data_from'], "%d/%m/%Y").ljust(10) + '\t' + datetime.strftime(f['data_to'], "%d/%m/%Y").ljust(15) + '\t' + ('s' if f['has_shapes'] else ' ') + '\t' + ('u' if f['url'] else ' ') + '\t' + ('r' if f.get('has_newer_zip', False) else ' ') + '\033[0m'
 
     def _loadfeeds(self, name = None):
         ret = []
@@ -325,11 +325,11 @@ class GTFSManager(object):
     def _store_postprocess_cmd(self, feedname, cmd):
         feed = self._get_feed_by_name(feedname)
         if not feed:
-            sys.stderr.write('No feed named "' + str(feedname) + '"" found...\n')
+            sys.stderr.write('No feed named "%s" found...\n' % str(feedname))
             return
         if not cmd:
             cmd = raw_input('Enter cmd: ')
-        print 'Storing postprocessing cmd for ' + feedname
+        print 'Storing postprocessing cmd for %s' % feedname
         with open(os.path.join(feedname, 'postprocess.txt'), 'w') as postprocess_f:
             postprocess_f.write(cmd)
 
@@ -475,5 +475,8 @@ if __name__ == '__main__':
     from docopt import docopt
 
     arguments = docopt(__doc__, version='geOps GTFS Manager 0.2')
-    main(options=arguments)
+    try:
+        main(options=arguments)
+    except KeyboardInterrupt:
+        print "\nCancelled by user."
     exit(0)
