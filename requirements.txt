@@ -3,3 +3,6 @@ zipfile
 urllib2
 datetime
 urlparse
+httplib
+dateutil
+shutil
