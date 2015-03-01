@@ -7,7 +7,7 @@ A cache will be build in the GTFS directories, containing the valid period of GT
 
 Usage:
   gtfsman.py [list | status | show] [--active | -a] [--notactive | -n] [--checkremotedate] [--base-folder=<path>]
-  gtfsman.py show <feedname> [--checkremotedate]
+  gtfsman.py show <feedname> [--checkremotedate] [--base-folder=<path>]
   gtfsman.py update <feedname> [--dontbug] [--base-folder=<path>]
   gtfsman.py update-all [--base-folder=<path>] [--active | -a] [--notactive | -n] [--dontbug]
   gtfsman.py update-All [--base-folder=<path>] [--active | -a] [--notactive | -n] [--dontbug]
@@ -52,6 +52,8 @@ class GTFSManager(object):
 
         if not self.options['--base-folder']: self.options['--base-folder'] = os.getcwd()
 
+        print self.options['--base-folder']
+
         if self.options['list']:
             self.list()
         elif self.options['update']:
@@ -94,10 +96,11 @@ class GTFSManager(object):
         if self._download_feed(path, url):
             self._store_feed_url(url, path)
             self._clear_cache(path)
-            self._get_feed_by_name(will_be_name)
-            print '\033[92mInitialized new feed in %s \033[0m' % path
+            f = self._get_feed_by_name(will_be_name)
+            color = self._get_feed_color(f)
+            print color + 'Initialized new feed in %s \033[0m' % path
         else:
-            print '\033[91mInitialization of %s failed.\033[0m' % path
+            print color + 'Initialization of %s failed.\033[0m' % path
 
     def list(self):
         for f in self._loadfeeds():
@@ -122,8 +125,9 @@ class GTFSManager(object):
         if self._download_feed(feed['fullpath'], feed['url']):
             # rewrite cache by calling feed load
             self._clear_cache(feed['fullpath'])
-            self._get_feed_by_name(feed['name'])
-            print '\033[92mUpdated %s\033[0m' % feed['name']
+            feed = self._get_feed_by_name(feed['name'])
+            color = self._get_feed_color(feed)
+            print color + 'Updated %s\033[0m' % feed['name']
 
     def _download_feed(self, path, url):
         url = urlparse(url)
@@ -211,7 +215,7 @@ class GTFSManager(object):
         if not feedname:
             return self.list()
 
-        f = self._loadfeed(feedname)
+        f = self._get_feed_by_name(feedname)
         if not f:
             sys.stderr.write('No feed named "%s" found...\n' % str(feedname))
             return
@@ -241,6 +245,10 @@ class GTFSManager(object):
             print 'Postprocess cmd: '.ljust(17) + f['postprocess']
 
     def _print_feed(self, f):
+        color = self._get_feed_color(f)
+        print color + f['name'].ljust(30) + '\t' + datetime.strftime(f['data_from'], "%d/%m/%Y").ljust(10) + '\t' + datetime.strftime(f['data_to'], "%d/%m/%Y").ljust(15) + '\t' + ('s' if f['has_shapes'] else ' ') + '\t' + ('u' if f['url'] else ' ') + '\t' + ('r' if f.get('has_newer_zip', False) else ' ') + '\033[0m'
+
+    def _get_feed_color(self, f):
         color = '\033[92m'
         daydiff = (datetime.now() - f['data_to']).days
         if daydiff > -7:
@@ -257,13 +265,15 @@ class GTFSManager(object):
             # feed only starts in the future...
             color = '\033[94m'
 
-        print color + f['name'].ljust(30) + '\t' + datetime.strftime(f['data_from'], "%d/%m/%Y").ljust(10) + '\t' + datetime.strftime(f['data_to'], "%d/%m/%Y").ljust(15) + '\t' + ('s' if f['has_shapes'] else ' ') + '\t' + ('u' if f['url'] else ' ') + '\t' + ('r' if f.get('has_newer_zip', False) else ' ') + '\033[0m'
+        return color
 
     def _loadfeeds(self, name = None):
         ret = []
         for path in self._getfeeds(self.options['--base-folder'], 2):
             if not name or name == os.path.basename(os.path.abspath(path)):
-                yield self._loadfeed(path)
+                feed = self._loadfeed(path)
+                if not feed: continue
+                yield feed
 
     def _loadfeed(self, path):
         try:
@@ -285,9 +295,10 @@ class GTFSManager(object):
 
             self._write_span_cache(feed)
             return feed
-        except Exception, err:
-            print 'Error while parsing ' + str(path)
+        except Exception as err:
+            print 'Error while parsing ' + str(path)            
             print err
+            return None
 
     def _check_for_newer_zip(self, path, url):
         if not url: return None, None, None
