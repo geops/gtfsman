@@ -52,8 +52,6 @@ class GTFSManager(object):
 
         if not self.options['--base-folder']: self.options['--base-folder'] = os.getcwd()
 
-        print self.options['--base-folder']
-
         if self.options['list']:
             self.list()
         elif self.options['update']:
