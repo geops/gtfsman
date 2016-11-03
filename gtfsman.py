@@ -144,7 +144,7 @@ class GTFSManager(object):
         return True
 
     def update_all(self, forcelevel = 0):
-        for f in self._loadfeeds():
+        for f in list(self._loadfeeds()):
             daydiff = (datetime.now() - f['data_to']).days
             if daydiff > 0 or (daydiff > -7 and forcelevel == 1) or forcelevel == 2:
                 self.update_feed(f)
@@ -294,7 +294,7 @@ class GTFSManager(object):
             self._write_span_cache(feed)
             return feed
         except Exception as err:
-            print 'Error while parsing ' + str(path)            
+            print 'Error while parsing ' + str(path)
             print err
             return None
 
