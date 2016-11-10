@@ -43,7 +43,7 @@ import shutil
 
 # do not require calendar.txt
 GTFS_REQ_FILES = ['agency.txt', 'routes.txt', 'trips.txt', 'stops.txt', 'stop_times.txt']
-GTFS_VALID_FILES = ['transfers.txt', 'frequencies.txt', 'agency.txt', 'routes.txt', 'trips.txt', 'stops.txt', 'stop_times.txt', 'feed_info.txt', 'calendar.txt', 'calendar_dates.txt', 'shapes.txt']
+GTFS_VALID_FILES = ['transfers.txt', 'fare_attributes.txt', 'fare_rules.txt', 'frequencies.txt', 'agency.txt', 'routes.txt', 'trips.txt', 'stops.txt', 'stop_times.txt', 'feed_info.txt', 'calendar.txt', 'calendar_dates.txt', 'shapes.txt']
 
 class GTFSManager(object):
 
@@ -239,12 +239,13 @@ class GTFSManager(object):
         if 'remote_date' in f and 'local_date' in f:
             print 'newer at url: '.ljust(17) + ('Yes' if f.get('has_newer_zip', False) else 'No') + ' (remote: ' +  datetime.strftime(f['remote_date'], "%d/%m/%Y") + ', local: ' + datetime.strftime(f['local_date'], "%d/%m/%Y") + ')'
         print 'has shapes: '.ljust(17) + ('Yes' if f['has_shapes'] else 'No')
+        print 'has fare: '.ljust(17) + ('Yes' if f['has_fare'] else 'No')
         if f['postprocess']:
             print 'Postprocess cmd: '.ljust(17) + f['postprocess']
 
     def _print_feed(self, f):
         color = self._get_feed_color(f)
-        print color + f['name'].ljust(30) + '\t' + datetime.strftime(f['data_from'], "%d/%m/%Y").ljust(10) + '\t' + datetime.strftime(f['data_to'], "%d/%m/%Y").ljust(15) + '\t' + ('s' if f['has_shapes'] else ' ') + '\t' + ('u' if f['url'] else ' ') + '\t' + ('r' if f.get('has_newer_zip', False) else ' ') + '\033[0m'
+        print color + f['name'].ljust(30) + '\t' + datetime.strftime(f['data_from'], "%d/%m/%Y").ljust(10) + '\t' + datetime.strftime(f['data_to'], "%d/%m/%Y").ljust(15) + '\t' + ('s' if f['has_shapes'] else ' ') + '\t' + ('f' if f['has_fare'] else ' ') + '\t' + ('u' if f['url'] else ' ') + '\t' + ('r' if f.get('has_newer_zip', False) else ' ') + '\033[0m'
 
     def _get_feed_color(self, f):
         color = '\033[92m'
@@ -286,6 +287,7 @@ class GTFSManager(object):
             feed['url'] = self._parse_feed_url(path)
             feed['fullpath'] = path
             feed['has_shapes'] = os.path.isfile(os.path.join(path, 'shapes.txt'))
+            feed['has_fare'] = os.path.isfile(os.path.join(path, 'fare_attributes.txt'))
             feed['postprocess'] = self._parse_postprocess_cmd(path)
 
             if self.options['--checkremotedate']:
